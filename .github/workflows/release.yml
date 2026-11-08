@@ -1,0 +1,80 @@
+# Builds every package and publishes a GitHub Release when a version tag is pushed.
+# Normally you do not push tags by hand: run `python scripts/release.py patch`.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write        # needed to create the release
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Tag must match __version__
+        run: python scripts/release.py --check-tag "$GITHUB_REF_NAME"
+
+  linux:
+    needs: verify
+    runs-on: ubuntu-22.04          # old glibc => the AppImage runs on more distros
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: sudo apt-get update && sudo apt-get install -y python3-tk tk8.6 curl
+      - run: pip install -r requirements-build.txt
+      - run: bash packaging/build_appimage.sh
+      - run: bash packaging/build_deb.sh
+      - name: Source zip
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          git archive --format=zip --prefix="ps4-pkg-region-changer-$V/" \
+            -o "dist/ps4-pkg-region-changer-$V-source.zip" HEAD
+      - uses: actions/upload-artifact@v4
+        with: { name: linux, path: dist/* }
+
+  windows:
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-build.txt
+      - run: packaging\build_windows.bat
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: dist/*.exe }
+
+  macos:
+    needs: verify
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-build.txt
+      - run: bash packaging/build_macos.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: macos, path: dist/*.zip }
+
+  publish:
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - name: Checksums + release notes
+        run: |
+          cd dist && sha256sum * > SHA256SUMS.txt && cd ..
+          python3 scripts/release.py --notes-for "$GITHUB_REF_NAME" > notes.md
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: dist/*
