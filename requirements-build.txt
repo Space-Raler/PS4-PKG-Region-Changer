@@ -1,0 +1,2 @@
+# Only needed to build the AppImage / exe / app. The app itself uses the standard library only.
+pyinstaller>=6,<7

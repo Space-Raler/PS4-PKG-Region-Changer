@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=PS4 PKG Region Changer
+Comment=Change region/TitleID of PS4 PKGs and merge base + update
+Exec=ps4-pkg-region-changer
+Icon=ps4-pkg-region-changer
+Terminal=false
+Categories=Utility;
